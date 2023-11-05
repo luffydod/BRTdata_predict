@@ -6,6 +6,7 @@ from models.CNN_LSTM.cnn_lstm import CNN_LSTM_Model
 from models.RNN.rnn import RNNmodel
 from models.CNN.cnn import CNNmodel
 from models.GRU.gru import GRUmodel
+from models.AttentionLSTM.attention_lstm import AttentionLSTMmodel
 import matplotlib.pyplot as plt
 import os
 import json
@@ -154,6 +155,7 @@ def lstm(params):
     output_size = params["output_size"]             # 输出特征数
     lr = params["lr"]                               # 学习率
     epochs = params["epochs"]                       # 训练轮数
+
     model = LSTMmodel(input_size, hidden_size, num_layers, output_size, bidirectional=bidirectional).to(device)
 
 def cnn_lstm(params):
@@ -176,6 +178,18 @@ def gru(params):
     lr = params["lr"]                               # 学习率
     epochs = params["epochs"]                       # 训练轮数
     model = GRUmodel(input_size, hidden_size, num_layers, output_size, bidirectional=bidirectional).to(device)
+
+def attention_lstm(params):
+    global lr, epochs, model
+    '''超参数加载'''
+    input_size = params["input_size"]               # 输入特征数
+    hidden_size = params["hidden_size"]             # LSTM隐藏层神经元数
+    num_layers = params["num_layers"]               # LSTM层数
+    bidirectional = params["bidirectional"].lower() == "true"   # 是否双向
+    output_size = params["output_size"]             # 输出特征数
+    lr = params["lr"]                               # 学习率
+    epochs = params["epochs"]                       # 训练轮数
+    model = AttentionLSTMmodel(input_size, hidden_size, num_layers, output_size, bidirectional=bidirectional).to(device)
 
 def train(model_name, save_mod=False):
     loss_function = nn.MSELoss()
@@ -260,14 +274,17 @@ def main(model_name):
         gru(params)
     elif model_name == "CNN":
         cnn(params)
+    elif model_name == "Attention_LSTM":
+        attention_lstm(params)
+
 
     train(model_name=model_name)
     predict(model_name=model_name)
 
 if __name__ == '__main__':
     '''INPUT YOUR MODEL NAME'''
-    name_list = ["CNN", "RNN", "LSTM", "CNN_LSTM", "GRU"]
-    model_name = input("请输入模型名字【1: CNN   2: RNN   3: LSTM   4: CNN_LSTM   5: GRU】\n")
+    name_list = ["CNN", "RNN", "LSTM", "CNN_LSTM", "GRU", "Attention_LSTM"]
+    model_name = input("请输入模型名字【1: CNN   2: RNN   3: LSTM   4: CNN_LSTM   5: GRU   6: Attention_LSTM】\n")
     if model_name.isnumeric() and int(model_name) <= len(name_list):
         model_name = name_list[int(model_name) - 1]
 

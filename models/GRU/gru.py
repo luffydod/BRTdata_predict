@@ -1,10 +1,10 @@
 import torch.nn as nn
 
-class LSTMmodel(nn.Module):
+class GRUmodel(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, output_size, output_length=1*24, batch_first=True, bidirectional=False):
         super().__init__()
         self.output_length=output_length
-        self.lstm = nn.LSTM(
+        self.gru = nn.GRU(
             input_size=input_size,
             hidden_size=hidden_size,
             num_layers=num_layers,
@@ -18,6 +18,7 @@ class LSTMmodel(nn.Module):
         )
     
     def forward(self, x):
-        out, _ = self.lstm(x)
+        out, _ = self.gru(x)
         out = self.fc(out[:, -self.output_length:, :])
         return out
+    

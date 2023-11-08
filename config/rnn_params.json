@@ -5,5 +5,5 @@
     "num_layers": 1,
     "bidirectional": "False",
     "lr": 0.005,
-    "epochs": 120
+    "epochs": 50
 }

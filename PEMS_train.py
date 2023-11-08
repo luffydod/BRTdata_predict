@@ -8,11 +8,10 @@ from models.CNN.cnn import CNNmodel
 from models.GRU.gru import GRUmodel
 from models.AttentionLSTM.attention_lstm import AttentionLSTMmodel
 import matplotlib.pyplot as plt
-from matplotlib.font_manager import FontProperties
 import os
 import json
-import time
 import pandas as pd
+import re
 os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 X = None
@@ -22,15 +21,12 @@ testY = None
 lr = 0.0001
 epochs = 100
 model = None
-min_test_data = None
-max_test_data = None                                # 测试集的最大最小值
-data_path = "./data/BRT/厦门北站_brtdata.npz"       # 数据集路径
-data_name = "厦门北站"                              # 站点数据集名称
+data_path = "./data/PEMS03/new_pems03.npz"      # 数据集路径
+# 5760 = 5min * 12 * 24 * 20 = 20天
 save_mod_dir = "./models/save"                      # 模型保存路径
 
 '''load_data'''
-def load_data(cut_point, data_path, input_length=7*24, output_length=1*24, days=61, hours=24):
-    global min_test_data, max_test_data
+def load_data(cut_point, data_path, input_length=12*24*7, output_length=12*24):
     '''
         INPUT:
                 cut_point, 训练和测试数据集划分点
@@ -45,16 +41,6 @@ def load_data(cut_point, data_path, input_length=7*24, output_length=1*24, days=
     data = np.load(data_path)['data']
     data = data.astype(np.float32)
     data = data[:, np.newaxis]
-    
-    seq_days = np.arange(days)
-    seq_hours = np.arange(hours)
-    seq_day_hour = np.transpose(
-        [np.repeat(seq_days, len(seq_hours)),
-         np.tile(seq_hours, len(seq_days))]
-    )   # Cartesian Product
-
-    # 按照列方向拼接 --> [客流量, days, hours]
-    data = np.concatenate((data, seq_day_hour), axis=1)
 
     train_data = data[:cut_point]
     test_data = data[cut_point:]
@@ -103,8 +89,6 @@ def load_data(cut_point, data_path, input_length=7*24, output_length=1*24, days=
     # testY = torch.tensor([item.cpu().detach().numpy() for item in test_outseq], dtype=torch.float32, device=device)
 
     # 输出数据形状
-    print("数据集处理完毕：")
-    print("data - 原数据集 shape:", data.shape)
     print("traindata - Input shape:", X.shape)
     print("traindata - Output shape:", Y.shape)
     print("testdata - Input shape:", testX.shape)
@@ -121,13 +105,7 @@ def min_max_normalise_numpy(x):
     max_vals = np.expand_dims(max_vals, axis=0)
     # 归一化 -> [-1, 1]
     normalized_data = 2 * (x - min_vals) / (max_vals - min_vals) - 1
-    # 归一化 -> [0, 1]
-    # normalized_data = (x - min_vals) / (max_vals - min_vals)
     return normalized_data, min_vals, max_vals
-
-def inverse_min_max_normalise_numpy(normalised_x, min_vals, max_vals):
-    x = (normalised_x + 1) / 2 * (max_vals - min_vals) + min_vals
-    return x
 
 def min_max_normalise_tensor(x):
     # shape: [samples, sequence_length, features]
@@ -179,7 +157,7 @@ def cnn_lstm(params):
     output_size = params["output_size"]         # 输出特征数
     lr = params["lr"]                           # 学习率
     epochs = params["epochs"]                   # 训练轮数
-    model = CNN_LSTM_Model(input_size=input_size, output_size=output_size).to(device)
+    model = CNN_LSTM_Model(input_size=1, output_size=output_size, output_length=24*12).to(device)
 
 def gru(params):
     global lr, epochs, model
@@ -211,8 +189,6 @@ def train(model_name, save_mod=False):
 
     loss_list = []      # 保存训练过程中loss数据
 
-    # 开始计时
-    start_time = time.time()  # 记录模型训练开始时间
     # train model
     for epoch in range(epochs):
         Y_hat = model(X)
@@ -220,27 +196,66 @@ def train(model_name, save_mod=False):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        print(f'Epoch [{epoch+1}/{epochs}], MSE-Loss: {loss.item()}')
+
+        print(f'Epoch [{epoch+1}/{epochs}], Loss: {loss.item()}')
         loss_list.append(loss.item())
-    end_time = time.time()  # 记录模型训练结束时间
-    total_time = end_time - start_time  # 计算总耗时
-    print(f"本次模型训练总耗时: {total_time} 秒，超越了全国99.2%的单片机，太棒啦！")
+
     if save_mod == True:
+        
         # save model -> ./**/model_name_eopch{n}.pth
         torch.save(model.state_dict(), '{}/{}_epoch{}.pth'.format(save_mod_dir, model_name, epochs))
         print("Trained Model have saved in:", '{}/{}_epoch{}.pth'.format(save_mod_dir, model_name, epochs))
 
     # save training loss graph
     epoch_index = list(range(1,epochs+1))
-    plt.figure(figsize=(10, 6))
-    plt.plot(epoch_index, loss_list, marker='.', label='MSE Loss', color='red')
+    plt.plot(epoch_index, loss_list)
     plt.xlabel('Epoch')  # x 轴标签
     plt.ylabel('MSE Loss')  # y 轴标签
-    plt.title(f'{data_name}车站,{model_name}模型,训练过程MSE Loss曲线图',fontproperties='SimHei', fontsize=20)
-    plt.legend()
-    plt.grid(True)  # 添加网格背景
-    plt.style.use('seaborn-darkgrid')  # 设置网格样式
-    plt.savefig('./img/{}_{}_training_MSEloss_epoch{}.png'.format(data_name, model_name, epochs))
+    plt.savefig('./img/{}_training_MSEloss_epoch{}.png'.format(model_name, epochs))
+    plt.close()
+
+def continue_train(model_name, save_mod=True):
+    loss_function = nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    los_list = []      # 保存训练过程中loss数据
+
+    # 设置之前保存模型的路径
+    saved_model_path = './models/save/CNN_LSTM_epoch50.pth'
+    # 从文件名中提取数字作为新的 epoch 起点
+    epoch_number = re.findall(r'\d+', saved_model_path)
+    if epoch_number:
+        new_start_epoch = int(epoch_number[0]) + 1  # 获取数字并加1作为新的起点
+        print("New epoch starting point:", new_start_epoch)
+    else:
+        print("Epoch number not found in the file name.")
+
+    # 加载模型权重
+    model.load_state_dict(torch.load(saved_model_path))
+
+    # train model
+    epochs = new_start_epoch + epochs
+    for epoch in range(new_start_epoch, epochs):
+        Y_hat = model(X)
+        loss = loss_function(Y_hat, Y)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        print(f'Epoch [{epoch}/{epochs}], Loss: {loss.item()}')
+        loss_list.append(loss.item())
+
+    if save_mod == True:
+        # save model -> ./**/model_name_eopch{n}.pth
+        torch.save(model.state_dict(), '{}/{}_epoch{}.pth'.format(save_mod_dir, model_name, epochs))
+        print("Trained Model have saved in:", '{}/{}_epoch{}.pth'.format(save_mod_dir, model_name, epochs))
+
+    # save training loss graph
+    epoch_index = list(range(new_start_epoch, epochs))
+    plt.plot(epoch_index, loss_list)
+    plt.xlabel('Epoch')  # x 轴标签
+    plt.ylabel('MSE Loss')  # y 轴标签
+    plt.savefig('./img/{}_training_MSEloss_epoch{}.png'.format(model_name, epochs))
     plt.close()
 
 def predict(model_name):
@@ -263,36 +278,23 @@ def predict(model_name):
         {'Loss Type': 'MSE Loss', 'Loss Value': mse_val.cpu().item()},
         {'Loss Type': 'RMSE Loss', 'Loss Value': rmse_val.cpu().item()}
     ]
+    # losses_df = pd.DataFrame(list(losses.items()), columns=['Loss Type', 'Loss Value'])
     losses_df = pd.DataFrame(losses)
     print(losses_df)
 
     # draw
     predict = testY_hat[0, :, 0].cpu().data.numpy()
     real = testY[0, :, 0].cpu().data.numpy()
-    predict = inverse_min_max_normalise_numpy(predict, min_vals=min_test_data[:,0], max_vals=max_test_data[:,0])
-    real = inverse_min_max_normalise_numpy(real, min_vals=min_test_data[:,0], max_vals=max_test_data[:,0])
-    
-    # 生成时间序列，时间间隔为1小时，共24小时
-    time_series = list(range(24))
-    # 定义时间标签
-    time_labels = [f"{i}:00" for i in range(24)]
-    font = FontProperties(family='SimHei', size=20)
-    plt.figure(figsize=(12, 6))
-    plt.ylabel('客流量', fontproperties=font)
-    plt.plot(time_series, predict, marker='o', color='red', label='预测值')
-    plt.plot(time_series, real, marker='o', color='blue', label='真实值')
-    plt.xlabel('时间', fontproperties=font)
-    plt.ylabel('客流量', fontproperties=font)
-    plt.title(f'{data_name}车站2023年5月31日客流量,{model_name}模型,预测值效果对比图(epoch={epochs})', fontproperties=font)
-    plt.legend(prop=font)
-    plt.xticks(time_series, time_labels)  # 设置时间标签
-    plt.savefig('./img/{}_{}_prediction_epoch{}.png'.format(data_name, model_name, epochs))
+    plt.plot(predict, 'r', label='predict')
+    plt.plot(real, 'b', label='real')
+    plt.legend(loc='best')
+    plt.savefig('./img/{}_prediction_epoch{}.png'.format(model_name, epochs))
     plt.pause(4)
 
-def main(model_name, save_mod):
+def main(model_name):
     '''加载数据集'''
     global X, Y, testX, testY
-    X, Y, testX, testY = load_data(cut_point=1272, data_path=data_path)
+    X, Y, testX, testY = load_data(cut_point=3168, data_path=data_path)
 
     '''读取超参数配置文件'''
     params = None
@@ -313,48 +315,16 @@ def main(model_name, save_mod):
         attention_lstm(params)
 
 
-    train(model_name=model_name, save_mod=save_mod)
+    # train(model_name=model_name, save_mod=True)
+    continue_train(model_name=model_name)
     predict(model_name=model_name)
 
 if __name__ == '__main__':
-    '''CHOOSE DATAPATH'''
-    # (1464, 45, 1) ——> 45个BRT站点连续61days共计1464个小时的客流量数据
-    station_list = ['第一码头', '开禾路口', '思北', '斗西路',
-                    '二市', '文灶', '金榜公园', '火车站',
-                    '莲坂', '龙山桥', '卧龙晓城', '东芳山庄',
-                    '洪文', '前埔枢纽站', '蔡塘', '金山', '市政务服务中心',
-                    '双十中学', '县后', '高崎机场', 'T4候机楼', '嘉庚体育馆',
-                    '诚毅学院', '华侨大学', '大学城', '产业研究院', '中科院',
-                    '东宅', '田厝', '厦门北站', '凤林', '东安', '后田', '东亭',
-                    '美峰', '蔡店', '潘涂', '滨海新城西柯枢纽', '官浔', '轻工食品园',
-                    '四口圳', '工业集中区', '第三医院', '城南', '同安枢纽']
-    # 创建一个字典，将数字与车站名称进行映射
-    station_dict = {i: station_list[i-1] for i in range(1, len(station_list)+1)}
-    # 创建 DataFrame
-    df = pd.DataFrame(list(station_dict.items()), columns=['编号', '车站名称'])
-    # 设置显示宽度以保持对齐
-    pd.set_option('display.max_colwidth', 28)
-    print(df.to_string(index=False))
-    user_input = input("请输入你要训练的车站数据集编号（1~45，否则随机选择）：")
-    if int(user_input) in station_dict:
-        data_name = station_dict[int(user_input)]
-    else:
-        # 随机选择一个站点(1-45之间的一个站点)
-        random_station = np.random.randint(1, 46)
-        data_name = station_list[random_station]
-    data_path = f"./data/BRT/{data_name}_brtdata.npz"
-    print("数据加载中, 请稍后……", data_path)
-
     '''INPUT YOUR MODEL NAME'''
     name_list = ["CNN", "RNN", "LSTM", "CNN_LSTM", "GRU", "Attention_LSTM"]
-    model_name = input("请输入要使用的模型【1: CNN   2: RNN   3: LSTM   4: CNN_LSTM   5: GRU   6: Attention_LSTM】\n")
+    model_name = input("请输入模型名字【1: CNN   2: RNN   3: LSTM   4: CNN_LSTM   5: GRU   6: Attention_LSTM】\n")
     if model_name.isnumeric() and int(model_name) <= len(name_list):
         model_name = name_list[int(model_name) - 1]
-    '''SAVE MODE'''
-    save_mod = input("是否要保存训练后的模型？（输入 '1' 保存，否则不保存）\n")
-    if int(save_mod) == 1:
-        save_mod = True
-    else:
-        save_mod = False
+
     '''main()'''
-    main(model_name, save_mod)
+    main(model_name)

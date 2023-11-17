@@ -3,7 +3,7 @@
     "output_size": 1,
     "hidden_size": 64,
     "num_layers": 1,
-    "bidirectional": "False",
+    "bidirectional": "True",
     "lr": 0.005,
-    "epochs": 120
+    "epochs": 250
 }

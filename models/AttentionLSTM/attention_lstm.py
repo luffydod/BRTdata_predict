@@ -13,17 +13,26 @@ class AttentionLSTMmodel(nn.Module):
             batch_first=batch_first,
             bidirectional=bidirectional
         )
-        self.attention = nn.Linear(hidden_size, hidden_size)
-        self.fc = nn.Linear(hidden_size, output_size)
+        self.fc1 = nn.Linear(hidden_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, output_size * output_length)
         self.relu = nn.ReLU()
 
-    def forward(self, x):
-        out, _ = self.lstm(x)
-        out = out[:, -self.output_length:, :]
-        e = torch.matmul(self.attention(out), out.permute(0, 2, 1))
+    def attention(self, lstm_output):
+        # 计算注意力权重
+            # attn_weights: B, len, 1
+        attn_weights = torch.softmax(self.fc1(lstm_output), dim=1)
+        # 对LSTM输出进行加权平均
+            # (B, 1, len) * (B, len, hidden_size)
+        attn_applied = torch.bmm(attn_weights.permute(0, 2, 1), lstm_output)
+        return attn_applied
 
-        attention = torch.softmax(e, dim=-1)
-        out = torch.bmm(attention, out)
-        out = self.relu(out)
-        out = self.fc(out)
+    def forward(self, x):
+        lstm_out, _ = self.lstm(x)
+
+        # 计算注意力权重并应用到LSTM输出
+        attn_applied = self.attention(lstm_out)
+
+        out = self.fc2(attn_applied)
+
+        out = out.permute(0, 2, 1)
         return out

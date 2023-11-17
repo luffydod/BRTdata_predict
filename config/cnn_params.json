@@ -2,6 +2,6 @@
     "input_size": 3,
     "output_size": 1,
     "hidden_size": 64,
-    "lr": 0.005,
-    "epochs": 120
+    "lr": 0.001,
+    "epochs": 150
 }

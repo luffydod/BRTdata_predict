@@ -11,11 +11,18 @@ class LSTMmodel(nn.Module):
             batch_first=batch_first,
             bidirectional=bidirectional
         )
-        self.fc = nn.Sequential(
-            nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, output_size),
-        )
+        if(bidirectional==True):
+            self.fc = nn.Sequential(
+                nn.Linear(2*hidden_size, hidden_size),
+                nn.ReLU(),
+                nn.Linear(hidden_size, output_size),
+            )
+        else:
+            self.fc = nn.Sequential(
+                nn.Linear(hidden_size, hidden_size),
+                nn.ReLU(),
+                nn.Linear(hidden_size, output_size),
+            )
     
     def forward(self, x):
         out, _ = self.lstm(x)

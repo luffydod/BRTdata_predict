@@ -4,6 +4,6 @@
     "hidden_size": 64,
     "num_layers": 1,
     "bidirectional": "False",
-    "lr": 0.002,
-    "epochs": 200
+    "lr": 0.001,
+    "epochs": 150
 }

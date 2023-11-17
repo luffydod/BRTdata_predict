@@ -11,7 +11,7 @@ class LSTMmodel(nn.Module):
             batch_first=batch_first,
             bidirectional=bidirectional
         )
-        if(bidirectional==True):
+        if(bidirectional==True):    # 双向LSTM，隐状态翻倍
             self.fc = nn.Sequential(
                 nn.Linear(2*hidden_size, hidden_size),
                 nn.ReLU(),

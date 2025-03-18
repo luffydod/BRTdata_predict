@@ -4,7 +4,6 @@ __pycache__
 *.pyd
 *.pyw
 *.pyz
-
 data/*
-
 img/*
+save_model/*

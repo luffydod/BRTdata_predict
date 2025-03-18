@@ -28,7 +28,7 @@ min_test_data = None
 max_test_data = None                                # 测试集的最大最小值
 data_path = "./data/BRT/厦门北站_brtdata.npz"       # 数据集路径
 data_name = "厦门北站"                              # 站点数据集名称
-save_mod_dir = "./models/save"                      # 模型保存路径
+save_mod_dir = "./save_model"                      # 模型保存路径
 
 '''load_data'''
 def load_data(cut_point, data_path, input_length=7*24, output_length=1*24, days=61, hours=24):
@@ -153,7 +153,7 @@ def inverse_min_max_normalise_tensor(x, min_vals, max_vals):
 
 # MAPE: 平均绝对百分比误差
 def MAPELoss(y_hat, y):
-    x = torch.tensor(0.0001, dtype=torch.float32).to(device)
+    x = torch.tensor(1e-6, dtype=torch.float32).to(device)
     y_new = torch.where(y==0, x, y)    # 防止分母为0
     abs_error = torch.abs((y - y_hat) / y_new)
     mape = 100. * torch.mean(abs_error)
@@ -225,7 +225,7 @@ def attention_lstm(params):
     output_size = params["output_size"]             # 输出特征数
     lr = params["lr"]                               # 学习率
     epochs = params["epochs"]                       # 训练轮数
-    model = AttentionLSTMmodel(input_size, hidden_size, num_layers, output_size, bidirectional=bidirectional).to(device)
+    model = AttentionLSTMmodel(input_size, hidden_size, num_layers, output_size, bidirectional=bidirectional, device=device).to(device)
 
 def seq2seq(params):
     global lr, epochs, model
